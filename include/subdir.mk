@@ -33,6 +33,16 @@ diralias=$(if $(findstring $(1),$(call lastdir,$(1))),,$(call lastdir,$(1)))
 # 2: target
 # 3: build type
 # 4: build variant
+# exmaple
+#target/linux/install:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'target/Makefile', line 22):
+#			@mkdir -p /home/pete/Study/Wrt/openwrt/logs/target/linux/
+#			@+  set -o pipefail; mkdir -p /home/pete/Study/Wrt/openwrt/logs/target/linux; $(SUBMAKE) -r -C target/linux install BUILD_SUBDIR="target/linux" BUILD_VARIANT="" SILENT= 2>&1 | tee /home/pete/Study/Wrt/openwrt/logs/target/linux/install.txt
+
+# $(1): target/linux, $(2): install, $(3): , $(4): ,
 log_make = \
 	 $(if $(call debug,$(1),v),,@)+ \
 	 $(if $(BUILD_LOG), \
@@ -44,15 +54,26 @@ log_make = \
 		$(if $(BUILD_LOG),SILENT= 2>&1 | tee $(BUILD_LOG_DIR)/$(1)$(if $(4),/$(4))/$(if $(3),$(3)-)$(2).txt)
 
 # Parameters: <subdir>
+# curdir:=target
+# $(eval $(call subdir,$(curdir)))
 define subdir
   $(call warn,$(1),d,D $(1))
+
+  # $(curdir)/builddirs:=linux sdk imagebuilder toolchain
   $(foreach bd,$($(1)/builddirs),
     $(call warn,$(1),d,BD $(1)/$(bd))
+
+    # SUBTARGETS:=clean download prepare compile install update refresh prereq dist distcheck configure check
     $(foreach target,$(SUBTARGETS),
       $(foreach btype,$(buildtypes-$(bd)),
+
+        # $(1): target, $(bd): linux, $(target): install
         $(call warn_eval,$(1)/$(bd),t,T,$(1)/$(bd)/$(btype)/$(target): $(if $(QUILT),,$($(1)/$(bd)/$(btype)/$(target)) $(call $(1)//$(btype)/$(target),$(1)/$(bd)/$(btype))))
+
+                  # $(1): target, $(bd): linux, $(target): install
 		  $(call log_make,$(1)/$(bd),$(target),$(btype),$(filter-out __default,$(variant))) \
 			$(if $(findstring $(bd),$($(1)/builddirs-ignore-$(btype)-$(target))), || $(call ERROR,$(1),   ERROR: $(1)/$(bd) [$(btype)] failed to build.))
+
         $(if $(call diralias,$(bd)),$(call warn_eval,$(1)/$(bd),l,T,$(1)/$(call diralias,$(bd))/$(btype)/$(target): $(1)/$(bd)/$(btype)/$(target)))
       )
       $(call warn_eval,$(1)/$(bd),t,T,$(1)/$(bd)/$(target): $(if $(QUILT),,$($(1)/$(bd)/$(target)) $(call $(1)//$(target),$(1)/$(bd))))

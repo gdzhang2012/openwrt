@@ -1,0 +1,27 @@
+diff --git a/net/netfilter/core.c b/net/netfilter/core.c
+index f39276d..178846a 100644
+--- a/net/netfilter/core.c
++++ b/net/netfilter/core.c
+@@ -274,6 +274,9 @@ repeat:
+ 		verdict = (*elemp)->hook((*elemp)->priv, skb, state);
+ 		if (verdict != NF_ACCEPT) {
+ #ifdef CONFIG_NETFILTER_DEBUG
++			NFDEBUG("The packet is not accepted by %p(%u).\n",
++				(*elemp)->hook, state->hook);
++
+ 			if (unlikely((verdict & NF_VERDICT_MASK)
+ 							> NF_MAX_VERDICT)) {
+ 				NFDEBUG("Evil return from %p(%u).\n",
+diff --git a/net/netfilter/nf_internals.h b/net/netfilter/nf_internals.h
+index 0655225..dbf7ed0 100644
+--- a/net/netfilter/nf_internals.h
++++ b/net/netfilter/nf_internals.h
+@@ -6,7 +6,7 @@
+ #include <linux/netdevice.h>
+ 
+ #ifdef CONFIG_NETFILTER_DEBUG
+-#define NFDEBUG(format, args...)  printk(KERN_DEBUG format , ## args)
++#define NFDEBUG(format, args...)  printk(KERN_INFO format , ## args)
+ #else
+ #define NFDEBUG(format, args...)
+ #endif

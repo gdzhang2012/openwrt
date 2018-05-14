@@ -1,8 +1,75 @@
+diff --git a/include/linux/netfilter.h b/include/linux/netfilter.h
+index 0ad5567..13251f5 100644
+--- a/include/linux/netfilter.h
++++ b/include/linux/netfilter.h
+@@ -179,9 +179,14 @@ static inline int nf_hook_thresh(u_int8_t pf, unsigned int hook,
+ {
+ 	struct list_head *hook_list = &net->nf.hooks[pf][hook];
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "[%s %s] pf: %u, hook: %u\n", pf, hook);
++#endif
++
+ 	if (nf_hook_list_active(hook_list, pf, hook)) {
+ 		struct nf_hook_state state;
+ 
++		/* æÜ¹çÒÔÚËÅşnf_hook_state stateÃæ */
+ 		nf_hook_state_init(&state, hook_list, hook, thresh,
+ 				   pf, indev, outdev, sk, net, okfn);
+ 		return nf_hook_slow(skb, &state);
+@@ -221,6 +226,10 @@ NF_HOOK_THRESH(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk,
+ 	       int (*okfn)(struct net *, struct sock *, struct sk_buff *),
+ 	       int thresh)
+ {
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "[%s %s] thresh: %d\n", __FILE__, __FUNCTION__, thresh);
++#endif
++
+ 	int ret = nf_hook_thresh(pf, hook, net, sk, skb, in, out, okfn, thresh);
+ 	if (ret == 1)
+ 		ret = okfn(net, sk, skb);
+@@ -246,6 +255,10 @@ NF_HOOK(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk, struct
+ 	struct net_device *in, struct net_device *out,
+ 	int (*okfn)(struct net *, struct sock *, struct sk_buff *))
+ {
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "[%s %s] dev_in: %s, dev_out: %s\n", __FILE__, __FUNCTION__, in->name, out->name);
++#endif
++
+ 	return NF_HOOK_THRESH(pf, hook, net, sk, skb, in, out, okfn, INT_MIN);
+ }
+ 
+diff --git a/net/ipv4/ip_forward.c b/net/ipv4/ip_forward.c
+index da0d7ce..81dea68 100644
+--- a/net/ipv4/ip_forward.c
++++ b/net/ipv4/ip_forward.c
+@@ -145,6 +145,10 @@ int ip_forward(struct sk_buff *skb)
+ 
+ 	skb->priority = rt_tos2priority(iph->tos);
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "[%s %s] NF_HOOK here\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD,
+ 		       net, NULL, skb, skb->dev, rt->dst.dev,
+ 		       ip_forward_finish);
 diff --git a/net/netfilter/core.c b/net/netfilter/core.c
-index f39276d..178846a 100644
+index f39276d..7429d69 100644
 --- a/net/netfilter/core.c
 +++ b/net/netfilter/core.c
-@@ -274,6 +274,9 @@ repeat:
+@@ -265,6 +265,10 @@ unsigned int nf_iterate(struct list_head *head,
+ 	 * function because of risk of continuing from deleted element.
+ 	 */
+ 	list_for_each_entry_continue_rcu((*elemp), head, list) {
++#ifdef CONFIG_NETFILTER_DEBUG
++		printk(KERN_INFO "[%s %s] state->thresh: %d, (*elemp)->priority: %d\n", __FILE__, __FUNCTION__, state->thresh, (*elemp)->priority);
++#endif
++
+ 		if (state->thresh > (*elemp)->priority)
+ 			continue;
+ 
+@@ -274,6 +278,9 @@ repeat:
  		verdict = (*elemp)->hook((*elemp)->priv, skb, state);
  		if (verdict != NF_ACCEPT) {
  #ifdef CONFIG_NETFILTER_DEBUG
@@ -12,6 +79,14 @@ index f39276d..178846a 100644
  			if (unlikely((verdict & NF_VERDICT_MASK)
  							> NF_MAX_VERDICT)) {
  				NFDEBUG("Evil return from %p(%u).\n",
+@@ -301,6 +308,7 @@ int nf_hook_slow(struct sk_buff *skb, struct nf_hook_state *state)
+ 	/* We may already have this, but read-locks nest anyway */
+ 	rcu_read_lock();
+ 
++	/* TODO: »Ø¿Ë·×»» */
+ 	elem = list_entry_rcu(state->hook_list, struct nf_hook_ops, list);
+ next_hook:
+ 	verdict = nf_iterate(state->hook_list, skb, state, &elem);
 diff --git a/net/netfilter/nf_internals.h b/net/netfilter/nf_internals.h
 index 0655225..dbf7ed0 100644
 --- a/net/netfilter/nf_internals.h

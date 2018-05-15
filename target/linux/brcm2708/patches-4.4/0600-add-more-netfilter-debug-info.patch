@@ -1,5 +1,5 @@
 diff --git a/include/linux/netfilter.h b/include/linux/netfilter.h
-index 0ad5567..13251f5 100644
+index 0ad5567..7747861 100644
 --- a/include/linux/netfilter.h
 +++ b/include/linux/netfilter.h
 @@ -179,9 +179,14 @@ static inline int nf_hook_thresh(u_int8_t pf, unsigned int hook,
@@ -7,7 +7,7 @@ index 0ad5567..13251f5 100644
  	struct list_head *hook_list = &net->nf.hooks[pf][hook];
  
 +#ifdef CONFIG_NETFILTER_DEBUG
-+	printk(KERN_INFO "[%s %s] pf: %u, hook: %u\n", pf, hook);
++	printk(KERN_INFO "[%s %s] pf: %u, hook: %u\n", __FILE__,  __FUNCTION__, pf, hook);
 +#endif
 +
  	if (nf_hook_list_active(hook_list, pf, hook)) {

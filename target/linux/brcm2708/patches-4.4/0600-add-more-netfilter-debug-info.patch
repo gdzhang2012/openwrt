@@ -1,5 +1,5 @@
 diff --git a/include/linux/netfilter.h b/include/linux/netfilter.h
-index 0ad5567..7747861 100644
+index 0ad5567..bbbd4c8 100644
 --- a/include/linux/netfilter.h
 +++ b/include/linux/netfilter.h
 @@ -179,9 +179,14 @@ static inline int nf_hook_thresh(u_int8_t pf, unsigned int hook,
@@ -7,7 +7,7 @@ index 0ad5567..7747861 100644
  	struct list_head *hook_list = &net->nf.hooks[pf][hook];
  
 +#ifdef CONFIG_NETFILTER_DEBUG
-+	printk(KERN_INFO "[%s %s] pf: %u, hook: %u\n", __FILE__,  __FUNCTION__, pf, hook);
++	printk(KERN_INFO "[%s %s] pf: %u, hook: %u, thresh: %d\n", __FILE__,  __FUNCTION__, pf, hook, thresh);
 +#endif
 +
  	if (nf_hook_list_active(hook_list, pf, hook)) {
@@ -28,7 +28,18 @@ index 0ad5567..7747861 100644
  	int ret = nf_hook_thresh(pf, hook, net, sk, skb, in, out, okfn, thresh);
  	if (ret == 1)
  		ret = okfn(net, sk, skb);
-@@ -246,6 +255,10 @@ NF_HOOK(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk, struct
+@@ -235,6 +244,10 @@ NF_HOOK_COND(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk,
+ {
+ 	int ret;
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "[%s %s] cond: %s\n", __FILE__, __FUNCTION__, cond ? "true" : "false");
++#endif
++
+ 	if (!cond ||
+ 	    ((ret = nf_hook_thresh(pf, hook, net, sk, skb, in, out, okfn, INT_MIN)) == 1))
+ 		ret = okfn(net, sk, skb);
+@@ -246,6 +259,10 @@ NF_HOOK(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk, struct
  	struct net_device *in, struct net_device *out,
  	int (*okfn)(struct net *, struct sock *, struct sk_buff *))
  {
@@ -40,7 +51,7 @@ index 0ad5567..7747861 100644
  }
  
 diff --git a/net/ipv4/ip_forward.c b/net/ipv4/ip_forward.c
-index da0d7ce..81dea68 100644
+index da0d7ce..d65f7b1 100644
 --- a/net/ipv4/ip_forward.c
 +++ b/net/ipv4/ip_forward.c
 @@ -145,6 +145,10 @@ int ip_forward(struct sk_buff *skb)
@@ -48,12 +59,138 @@ index da0d7ce..81dea68 100644
  	skb->priority = rt_tos2priority(iph->tos);
  
 +#ifdef CONFIG_NETFILTER_DEBUG
-+	printk(KERN_INFO "[%s %s] NF_HOOK here\n", __FILE__, __FUNCTION__);
++	printk(KERN_INFO "\n[%s %s] NF_HOOK, NFPROTO_IPV4, NF_INET_FORWARD\n", __FILE__, __FUNCTION__);
 +#endif
 +
  	return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD,
  		       net, NULL, skb, skb->dev, rt->dst.dev,
  		       ip_forward_finish);
+diff --git a/net/ipv4/ip_input.c b/net/ipv4/ip_input.c
+index b1209b6..187c803 100644
+--- a/net/ipv4/ip_input.c
++++ b/net/ipv4/ip_input.c
+@@ -254,6 +254,10 @@ int ip_local_deliver(struct sk_buff *skb)
+ 			return 0;
+ 	}
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "\n[%s %s] NF_HOOK, NFPROTO_IPV4, NF_INET_LOCAL_IN\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	return NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_IN,
+ 		       net, NULL, skb, skb->dev, NULL,
+ 		       ip_local_deliver_finish);
+@@ -452,6 +456,10 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
+ 	/* Must drop socket now because of tproxy. */
+ 	skb_orphan(skb);
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "\n[%s %s] NF_HOOK, NFPROTO_IPV4, NF_INET_PRE_ROUTING\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
+ 		       net, NULL, skb, dev, NULL,
+ 		       ip_rcv_finish);
+diff --git a/net/ipv4/ip_output.c b/net/ipv4/ip_output.c
+index 09c73dd..bb80cf0 100644
+--- a/net/ipv4/ip_output.c
++++ b/net/ipv4/ip_output.c
+@@ -322,10 +322,15 @@ int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
+ #endif
+ 		   ) {
+ 			struct sk_buff *newskb = skb_clone(skb, GFP_ATOMIC);
+-			if (newskb)
++			if (newskb) {
++#ifdef CONFIG_NETFILTER_DEBUG
++				printk(KERN_INFO "\n[%s %s] NF_HOOK, RTCF_MULTCAST, NFPROTO_IPV4, NF_INET_POST_ROUTING\n", __FILE__, __FUNCTION__);
++#endif
++
+ 				NF_HOOK(NFPROTO_IPV4, NF_INET_POST_ROUTING,
+ 					net, sk, newskb, NULL, newskb->dev,
+ 					dev_loopback_xmit);
++			}
+ 		}
+ 
+ 		/* Multicasts with ttl 0 must not go beyond the host */
+@@ -338,12 +343,21 @@ int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
+ 
+ 	if (rt->rt_flags&RTCF_BROADCAST) {
+ 		struct sk_buff *newskb = skb_clone(skb, GFP_ATOMIC);
+-		if (newskb)
++		if (newskb) {
++#ifdef CONFIG_NETFILTER_DEBUG
++			printk(KERN_INFO "\n[%s %s] NF_HOOK, RTCF_BROADCAST, NFPROTO_IPV4, NF_INET_POST_ROUTING\n", __FILE__, __FUNCTION__);
++#endif
++
+ 			NF_HOOK(NFPROTO_IPV4, NF_INET_POST_ROUTING,
+ 				net, sk, newskb, NULL, newskb->dev,
+ 				dev_loopback_xmit);
++		}
+ 	}
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "\n[%s %s] NF_HOOK_COND, NFPROTO_IPV4, NF_INET_POST_ROUTING\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
+ 			    net, sk, skb, NULL, skb->dev,
+ 			    ip_finish_output,
+@@ -359,6 +373,10 @@ int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
+ 	skb->dev = dev;
+ 	skb->protocol = htons(ETH_P_IP);
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "\n[%s %s] NF_HOOK_COND, NFPROTO_IPV4, NF_INET_POST_ROUTING\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
+ 			    net, sk, skb, NULL, dev,
+ 			    ip_finish_output,
+diff --git a/net/ipv4/ipmr.c b/net/ipv4/ipmr.c
+index 8e77786..fa226a0 100644
+--- a/net/ipv4/ipmr.c
++++ b/net/ipv4/ipmr.c
+@@ -1783,6 +1783,10 @@ static void ipmr_queue_xmit(struct net *net, struct mr_table *mrt,
+ 	 * not mrouter) cannot join to more than one interface - it will
+ 	 * result in receiving multiple packets.
+ 	 */
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "\n[%s %s] NF_HOOK, NFPROTO_IPV4, NF_INET_FORWARD\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD,
+ 		net, NULL, skb, skb->dev, dev,
+ 		ipmr_forward_finish);
+diff --git a/net/ipv4/raw.c b/net/ipv4/raw.c
+index 4d3d429..68b51dd 100644
+--- a/net/ipv4/raw.c
++++ b/net/ipv4/raw.c
+@@ -416,6 +416,10 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
+ 				skb_transport_header(skb))->type);
+ 	}
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "\n[%s %s] NF_HOOK, NFPROTO_IPV4, NF_INET_LOCAL_OUT\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	err = NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_OUT,
+ 		      net, sk, skb, NULL, rt->dst.dev,
+ 		      dst_output);
+diff --git a/net/ipv4/xfrm4_input.c b/net/ipv4/xfrm4_input.c
+index 62e1e72..5e061fd 100644
+--- a/net/ipv4/xfrm4_input.c
++++ b/net/ipv4/xfrm4_input.c
+@@ -53,6 +53,10 @@ int xfrm4_transport_finish(struct sk_buff *skb, int async)
+ 	iph->tot_len = htons(skb->len);
+ 	ip_send_check(iph);
+ 
++#ifdef CONFIG_NETFILTER_DEBUG
++	printk(KERN_INFO "\n[%s %s] NF_HOOK, NFPROTO_IPV4, NF_INET_PRE_ROUTING\n", __FILE__, __FUNCTION__);
++#endif
++
+ 	NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
+ 		dev_net(skb->dev), NULL, skb, skb->dev, NULL,
+ 		xfrm4_rcv_encap_finish);
 diff --git a/net/netfilter/core.c b/net/netfilter/core.c
 index f39276d..7429d69 100644
 --- a/net/netfilter/core.c
